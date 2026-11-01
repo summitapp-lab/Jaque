@@ -1,0 +1,17 @@
+{
+  "name": "Jaque — Juega y aprende",
+  "short_name": "Jaque",
+  "description": "Juega al ajedrez contra bots, aprende aperturas y revisa tus partidas con un entrenador. Funciona sin conexión.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#302e2b",
+  "theme_color": "#302e2b",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

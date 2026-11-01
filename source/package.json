@@ -1,0 +1,10 @@
+{
+  "name": "jaque-source",
+  "private": true,
+  "description": "Fuente de Jaque. Ejecuta `npm install` y después `python3 build.py` para regenerar los archivos de la raíz.",
+  "devDependencies": {
+    "chess.js": "1.4.0",
+    "chessground": "9.2.1",
+    "stockfish": "10.0.2"
+  }
+}
