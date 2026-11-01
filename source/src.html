@@ -176,6 +176,7 @@ select.vsel{flex:1;min-width:0;background:#3a3835;color:#fff;border:0;border-rad
 .opc.les{border:2px solid rgba(129,182,76,.35)}.lic{width:44px;height:44px;border-radius:8px;background:#3a3835;display:grid;place-items:center;flex:none!important}.lic i{width:36px;height:36px;background-size:100%;display:block;position:static;transform:none}
 .lsub{font-size:12.5px;color:var(--mut);font-weight:700}.lpre{display:block;color:#4b4844;font-size:13.5px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e6e3df}
 .gnav .btn2{padding:8px 0}.gview{display:none;align-items:center;justify-content:space-between;gap:8px;background:#f0c84b;color:#312e2b;border-radius:7px;padding:7px 10px;font-size:13px;font-weight:700}.gview.on{display:flex}.gview button{background:#312e2b;color:#fff;border-radius:6px;padding:5px 9px;font-weight:800;font-size:12.5px}
+.imptxt{width:100%;min-height:150px;background:#1f1e1b;color:#fff;border:1px solid #3d3a36;border-radius:8px;padding:10px;font-size:14px;font-family:inherit;resize:vertical;-webkit-user-select:text;user-select:text}
 .hist{display:flex;flex-direction:column;gap:6px}.hrow{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border-radius:8px;padding:9px 10px;cursor:pointer}.hrow:hover{background:rgba(255,255,255,.1)}.hrow>div{flex:1;min-width:0}.hrow b{font-size:14px;display:block}.hrow small{display:block;color:var(--mut);font-size:12px;margin-top:2px}.hres{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;font-weight:900;color:#fff;flex:none}.hrow .chev{font-size:22px;color:var(--mut)}
 .cbx{padding:12px 14px 0}.cbx:empty{display:none}.cbx .coach{margin-bottom:0}
 .tip{display:flex;gap:7px;align-items:flex-start;margin-top:8px;background:#eef6e6;border-radius:7px;padding:7px 9px;font-size:12.8px;line-height:1.4;color:#3b4a2f}.tip svg{width:18px;height:18px;flex:none;margin-top:1px}
@@ -443,7 +444,7 @@ class Engine{
   send(c){this.w.postMessage(c)}
   _wait(cmd,tok){return new Promise(r=>{this.lis=l=>{if(l.startsWith(tok)){this.lis=null;r()}};this.send(cmd)})}
   analyze(fen,o){const p=this.q.then(()=>this._go(fen,o));this.q=p.catch(()=>{});return p}
-  async _go(fen,{depth=12,mt=0,mpv=1}){
+  async _go(fen,{depth=12,mt=0,mpv=1,moves=null}){
     await this.ready;
     this.send('setoption name MultiPV value '+mpv);
     this.send('position fen '+fen);
@@ -458,7 +459,7 @@ class Engine{
           lines[k-1]={depth:d,cp:sc[1]==='cp'?+sc[2]:null,mate:sc[1]==='mate'?+sc[2]:null,pv};md=Math.max(md,d);
         }else if(l.startsWith('bestmove')){this.lis=null;const bm=l.split(' ')[1];res({lines:lines.filter(Boolean),best:bm==='(none)'?null:bm,depth:md})}
       };
-      this.send('go depth '+depth+(mt?' movetime '+mt:''));
+      this.send('go depth '+depth+(mt?' movetime '+mt:'')+(moves&&moves.length?' searchmoves '+moves.join(' '):''));
     })}
 }
 const engine=new Engine();
@@ -805,7 +806,7 @@ function capsHtml(fen,c){ // piezas capturadas por el jugador c
   const d=mat(ch,c);if(d>0)h+=`<span>+${d}</span>`;return h}
 let bubT=null;
 function renderBars(fen){
-  const bot=S.screen==='lesson'?{name:'Rival',elo:'apertura',col:'#5d5a56',em:'?'}:BOTS[S.botIdx];const topIsBot=(B.orient===(S.screen==='lesson'?S.les.L.side:S.user));
+  const bot=S.screen==='lesson'?{name:'Rival',elo:'apertura',col:'#5d5a56',em:'?'}:S.imported&&S.screen!=='setup'?{name:S.user==='w'?'Negras':'Blancas',elo:'importada',col:S.user==='w'?'#3d3a36':'#d9d6d0',em:S.user==='w'?'N':'B'}:BOTS[S.botIdx];const topIsBot=(B.orient===(S.screen==='lesson'?S.les.L.side:S.user));
   const botH=`${botAv(bot)}<div><div class="pname">${bot.name} <span class="elo">(${bot.elo})</span></div><div class="caps">${capsHtml(fen,opp(S.user))}</div></div><div class="bubble" id="bub"></div>`;
   const youH=`<div class="av">${USER_AV}</div><div><div class="pname">Tú</div><div class="caps">${capsHtml(fen,S.user)}</div></div>`;
   $('#pTop').innerHTML=topIsBot?botH:youH;$('#pBot').innerHTML=topIsBot?youH:botH;
@@ -860,6 +861,7 @@ function setupPanel(){
       <button data-act="color" data-v="r" class="${S.colorPref==='r'?'sel':''}"><div class="rnd">?</div></button>
       <button data-act="color" data-v="b" class="${S.colorPref==='b'?'sel':''}"><i class="pc bk" style="position:static;transform:none"></i></button>
     </div>
+    <button class="btn2" data-act="import" style="width:100%;margin-top:14px">${ICO.review}Importar una partida para revisarla</button>
     ${historyHtml()}
   </div>
   <div class="pfoot"><button class="btn" data-act="play">Jugar</button></div>`;
@@ -1084,14 +1086,14 @@ function unpackAn(p){return p.map(a=>({eval:unpackE(a[0]),best:a[1],pv:a[2]||[],
 function hAgo(t){const d=(Date.now()-t)/60000;if(d<1)return 'hace un momento';if(d<60)return `hace ${Math.round(d)} min`;if(d<1440)return `hace ${Math.round(d/60)} h`;
   return new Date(t).toLocaleDateString('es-ES',{day:'numeric',month:'short'})}
 function historyHtml(){const h=hLoad();if(!h.length)return '';
-  const R={win:['V','Victoria','#81b64c'],lose:['D','Derrota','#e0453a'],draw:['=','Tablas','#8b8987']};
+  const R={win:['V','Victoria','#81b64c'],lose:['D','Derrota','#e0453a'],draw:['=','Tablas','#8b8987'],imp:['↓','Partida importada','#5d9ad1']};
   return `<div class="lbl">Tus últimas partidas</div><div class="hist">${h.map(g=>{const b=BOTS[g.bot]||BOTS[0];const r=R[g.res]||R.draw;
-    return `<div class="hrow" data-act="hgame" data-v="${g.id}"><span class="hres" style="background:${r[2]}">${r[0]}</span><div><b>${r[1]} contra ${b.name} <span class="elo">(${b.elo})</span></b>
-      <small>Con ${g.user==='w'?'blancas':'negras'} · ${Math.ceil(g.moves.length/2)} jugadas · ${hAgo(g.date)}${g.acc!=null?` · precisión ${g.acc}%`:''}</small>${g.opening?`<small>${g.opening}</small>`:''}</div><span class="chev">›</span></div>`}).join('')}</div>`}
+    return `<div class="hrow" data-act="hgame" data-v="${g.id}"><span class="hres" style="background:${r[2]}">${r[0]}</span><div><b>${g.imported?`Partida importada${g.label?' ('+g.label+')':''}`:`${r[1]} contra ${b.name} <span class="elo">(${b.elo})</span>`}</b>
+      <small>${g.imported?'Revisada desde':'Con'} ${g.user==='w'?'blancas':'negras'} · ${Math.ceil(g.moves.length/2)} jugadas · ${hAgo(g.date)}${g.acc!=null?` · precisión ${g.acc}%`:''}</small>${g.opening?`<small>${g.opening}</small>`:''}</div><span class="chev">›</span></div>`}).join('')}</div>`}
 function openHistoryGame(id){
   const g=hLoad().find(x=>x.id===id);if(!g)return;
   Snd.init();Voice.stop();stopPreview(false);S.gid++;
-  S.botIdx=BOTS[g.bot]?g.bot:0;S.user=g.user;S.mode=g.mode||'review';S.view=null;S.hintsUsed=g.hints||0;S.liveCls={};S.curGameId=g.id;
+  S.imported=!!g.imported;S.botIdx=BOTS[g.bot]?g.bot:S.botIdx;S.user=g.user;S.mode=g.mode||'review';S.view=null;S.hintsUsed=g.hints||0;S.liveCls={};S.curGameId=g.id;
   S.game=new Chess();S.hist=[];
   for(const u of g.moves){const fb=S.game.fen();const m=tryMove(S.game,u);if(!m)break;
     S.hist.push({uci:u,san:m.san,esan:esSan(m.san),from:m.from,to:m.to,color:m.color,piece:m.piece,captured:m.captured,flags:m.flags,promotion:m.promotion,before:fb,after:S.game.fen()})}
@@ -1100,6 +1102,99 @@ function openHistoryGame(id){
   document.body.classList.add('ingame');S.screen='game';B.orient=S.user;B.onMove=onUserMove;
   setBoard({fen:S.game.fen(),last:null,lastColor:null,arrows:[],icon:null,check:kingSq(S.game),sel:null,dests:[],hintSq:null,interactive:null});
   renderBars(S.game.fen());startReview()}
+
+/* ====================== Importar partidas (PGN o jugadas pegadas) ====================== */
+const FIG={'♔':'K','♕':'Q','♖':'R','♗':'B','♘':'N','♙':'','♚':'K','♛':'Q','♜':'R','♝':'B','♞':'N','♟':''};
+function cleanText(t){
+  return t.replace(/\r/g,'')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g,' $1 ')            // enlaces markdown: [+0.35](url) → +0.35
+    .replace(/https?:\/\/\S+/g,' ')
+    .replace(/^\s*\[[A-Za-z]+\s+"[^"]*"\]\s*$/gm,' ')      // cabeceras PGN
+    .replace(/\{[^}]*\}/g,' ')                            // comentarios
+    .replace(/\$\d+/g,' ')}
+function stripVariations(t){let out='',d=0;for(const ch of t){if(ch==='(')d++;else if(ch===')'){if(d)d--;}else if(!d)out+=ch}return out}
+// Divide el texto en partidas: cada «1.» que no forma parte de otro número empieza una nueva
+function splitGames(t){
+  const idx=[];const re=/(^|[^\d.])1\.(?!\d)/g;let m;while((m=re.exec(t))){idx.push(m.index+m[1].length)}
+  if(!idx.length)return [{label:null,text:t}];
+  const out=[];for(let i=0;i<idx.length;i++){const seg=t.slice(idx[i],idx[i+1]??t.length);const pre=t.slice(i?idx[i-1]:0,idx[i]);
+    const ev=(pre.match(/([+-]?\d+\.\d+)\s*$/)||[])[1]||null;out.push({label:ev,text:seg})}
+  return out}
+function detectMode(text){
+  const toks=text.split(/\s+/);
+  const en=toks.some(t=>/^(\d+\.+)?[NBQK]x?[a-h]?[1-8]?x?[a-h][1-8]/.test(t)||/^(\d+\.+)?R[a-h1-8]?x?[a-h][1-8]/.test(t)&&false);
+  const es=toks.some(t=>/^(\d+\.+)?[CATD]x?[a-h]?[1-8]?x?[a-h][1-8]/.test(t));
+  const fig=/[♔♕♖♗♘♚♛♜♝♞]/.test(text);
+  const anyLetter=toks.some(t=>/^(\d+\.+)?[NBRQKCATD][a-h1-8x]/.test(t));
+  return {lang:es&&!en?'es':'en',stripped:!anyLetter&&!fig}}
+function normTok(t,lang){
+  t=t.replace(/[!?]+$/,'').replace(/[+#]+$/,'').replace(/^0-0-0$/,'O-O-O').replace(/^0-0$/,'O-O');
+  t=t.replace(/[♔♕♖♗♘♙♚♛♜♝♞♟]/g,c=>FIG[c]);
+  if(lang==='es'&&/^[CATDR](?=[a-h1-8x])/.test(t))t={C:'N',A:'B',T:'R',D:'Q',R:'K'}[t[0]]+t.slice(1);
+  t=t.replace(/=([CATD])$/,(a,c)=>'='+{C:'N',A:'B',T:'R',D:'Q'}[c]).replace(/([a-h][18])([QRBN])$/,'$1=$2');
+  return t}
+const plain=s=>s.replace(/[+#]/g,'');
+function candidates(ch,tok,hint,stripped){
+  const legal=ch.moves({verbose:true});
+  const exact=legal.filter(m=>plain(m.san)===tok);
+  const noLetter=/^[a-hx]/.test(tok);
+  const pc=noLetter?legal.filter(m=>m.piece!=='p'&&plain(m.san).slice(1)===tok):[];
+  if(exact.length&&!stripped)return exact;
+  if(hint&&pc.length)return pc;
+  const all=[...exact,...pc];
+  if(all.length)return all;
+  const strip=x=>x.replace(/^([NBRQK])[a-h1-8](?=x?[a-h][1-8])/,'$1');
+  return legal.filter(m=>strip(plain(m.san))===strip(tok))}
+async function parseMoves(text,mode,onProg){
+  const ch=new Chess();const ucis=[];const sans=[];let amb=0;
+  const re=/(\d+\.(?:\.\.)?)|(\s+)|([^\s]+)/g;let m,space=0;
+  while((m=re.exec(text))){
+    if(m[2]){space=m[2].length;continue}
+    if(m[1])continue;
+    let tok=m[3];const glued=/^\d+\.+(.*)$/.exec(tok);if(glued){tok=glued[1];if(!tok)continue}
+    const hint=space>=2;space=0;
+    if(/^(1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(tok))break;
+    tok=normTok(tok,mode.lang);
+    if(!/^(O-O(-O)?|[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?)$/.test(tok))continue;
+    let c=candidates(ch,tok,hint,mode.stripped);
+    if(!c.length)return {ucis,sans,amb,error:`No entiendo «${m[3]}» (jugada ${Math.floor(ucis.length/2)+1} de las ${ucis.length%2?'negras':'blancas'}).`};
+    let pickM=c[0];
+    if(c.length>1){amb++;if(onProg)onProg(ucis.length);
+      try{const r=await engine.analyze(ch.fen(),{depth:10,mt:900,mpv:1,moves:c.map(x=>x.from+x.to+(x.promotion||''))});
+        const f=c.find(x=>x.from+x.to+(x.promotion||'')===r.best);if(f)pickM=f}catch(e){}}
+    ch.move(pickM);ucis.push(pickM.from+pickM.to+(pickM.promotion||''));sans.push(pickM.san)}
+  return {ucis,sans,amb,error:null}}
+async function parseImport(raw,onProg){
+  const t=stripVariations(cleanText(raw));const mode=detectMode(t);const out=[];
+  const games=splitGames(t);for(let i=0;i<games.length;i++){const g=games[i];const r=await parseMoves(g.text,mode,ply=>onProg&&onProg(i,games.length,ply));if(r.ucis.length||r.error)out.push({...g,...r,mode})}
+  return out}
+
+function importPanel(){
+  S.screen='setup';
+  panel.innerHTML=`<div class="ph">${ICO.review}Importar partida</div><div class="pbody">
+    <div class="ointro">Pega aquí una partida o una secuencia de jugadas: de Chess.com, de Lichess, un PGN o escrita a mano (con letras inglesas o españolas). Si pegas varias líneas, podrás elegir cuál revisar.</div>
+    <textarea id="impTxt" class="imptxt" placeholder="1. e4 e5 2. Cf3 Cc6 3. Ab5 a6...">${S.impText||''}</textarea>
+    <div class="row" style="margin-top:8px"><button class="btn2" data-act="imppaste">${ICO.undo.replace('M9 14L4 9l5-5','M8 4h8v4H8z')}Pegar</button><button class="btn2" data-act="impclear">Borrar</button></div>
+    <div class="lbl">Revisar desde el lado de</div>
+    <div class="colors"><button data-act="impside" data-v="w" class="${(S.impSide||'w')==='w'?'sel':''}"><i class="pc wk" style="position:static;transform:none"></i></button><button data-act="impside" data-v="b" class="${S.impSide==='b'?'sel':''}"><i class="pc bk" style="position:static;transform:none"></i></button></div>
+    <div id="impRes"></div>
+  </div>
+  <div class="pfoot"><button class="btn" data-act="impgo">Reproducir y revisar</button><button class="btn2" data-act="impback">‹ Volver</button></div>`;
+  const ta=$('#impTxt');ta.addEventListener('input',()=>{S.impText=ta.value})}
+async function importGo(){
+  const raw=($('#impTxt')||{}).value||'';S.impText=raw;const box=$('#impRes');
+  if(!raw.trim()){toast('Pega primero las jugadas.');return}
+  box.innerHTML='<div class="status" style="margin-top:10px"><div class="spin"></div><span id="impSt">Leyendo las jugadas…</span></div>';
+  const games=await parseImport(raw,(gi,gn,ply)=>{const st=$('#impSt');if(st)st.textContent=`Interpretando jugadas sin letra de pieza${gn>1?` (partida ${gi+1} de ${gn})`:''}: jugada ${Math.floor(ply/2)+1}…`});S.impGames=games;
+  if(!games.length){box.innerHTML='<div class="err">No he encontrado jugadas en el texto.</div>';return}
+  if(games.length===1&&!games[0].error){loadImported(0);return}
+  box.innerHTML=`<div class="lbl">${games.length>1?'He encontrado '+games.length+' partidas: elige una':'Resultado'}</div>`+games.map((g,i)=>{
+    const prev=g.sans.slice(0,8).map((s,j)=>(j%2?'':(j/2+1)+'. ')+esSan(s)).join(' ');
+    return `<div class="hrow" ${g.ucis.length?`data-act="impgame" data-v="${i}"`:''}><span class="hres" style="background:${g.error?'#e0453a':'#5d9ad1'}">${i+1}</span><div><b>${g.label?`${g.label} · `:''}${Math.ceil(g.ucis.length/2)} jugadas</b><small>${prev}${g.sans.length>8?'…':''}</small>${g.error?`<small style="color:#ff9b8f">${g.error}${g.ucis.length?' Se revisará hasta ahí.':''}</small>`:''}${g.amb?`<small>${g.amb} jugada${g.amb>1?'s':''} sin letra de pieza: elegida${g.amb>1?'s':''} con ayuda del motor.</small>`:''}</div>${g.ucis.length?'<span class="chev">›</span>':''}</div>`}).join('')}
+function loadImported(i){const g=S.impGames[i];if(!g||!g.ucis.length)return;
+  if(g.amb)toast(`${g.amb} jugada${g.amb>1?'s':''} sin letra de pieza: elegida${g.amb>1?'s':''} con ayuda del motor.`);
+  const id=Date.now();const e={id,date:id,bot:-1,imported:true,label:g.label,user:S.impSide||'w',mode:'review',res:'imp',why:'partida importada',moves:g.ucis,hints:0,opening:bookInfo(g.ucis).name||null,acc:null,an:null};
+  const h=hLoad();h.unshift(e);hSave(h);openHistoryGame(id)}
 
 /* ====================== Clasificación ====================== */
 function isSacrifice(rec){
@@ -1851,7 +1946,7 @@ function graphSvg(){
   return `<svg class="graph" id="graph" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><rect width="${W}" height="${H}" fill="#403d39"/><path d="${d}" fill="#fff"/><line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="#8b8987" stroke-width=".8" stroke-dasharray="3 3"/><line x1="${cx}" y1="0" x2="${cx}" y2="${H}" stroke="#81b64c" stroke-width="2"/>${dots}</svg>`}
 function overviewCoach(){
   const su=stats(S.user),so=stats(opp(S.user));const r=S.over?S.over.res:'draw';
-  let t=r==='win'?pick(['¡Gran victoria!','¡Bien hecho, partida ganada!','¡Victoria merecida!']):r==='lose'?pick(['Esta vez no salió, pero de las derrotas es de donde más se aprende.','Partida dura. Vamos a ver dónde se decidió.']):'Unas tablas muy peleadas.';
+  let t=r==='imp'?'Vamos a revisar esta partida jugada a jugada.':r==='win'?pick(['¡Gran victoria!','¡Bien hecho, partida ganada!','¡Victoria merecida!']):r==='lose'?pick(['Esta vez no salió, pero de las derrotas es de donde más se aprende.','Partida dura. Vamos a ver dónde se decidió.']):'Unas tablas muy peleadas.';
   t+=' ';t+=su.acc>=90?`Jugaste con una precisión altísima (${su.acc}%).`:su.acc>=75?`Tu precisión fue del ${su.acc}%: una partida sólida.`:su.acc>=60?`Tu precisión fue del ${su.acc}%. Hubo buenos momentos y otros que podemos pulir.`:`Tu precisión fue del ${su.acc}%. Hay mucho que aprender aquí, y eso es buena noticia.`;
   let worst=-1,wl=0,bestI=-1;S.rv.k.forEach((k,i)=>{if(S.hist[i].color!==S.user)return;if(k.loss>wl&&NEG[k.cls]){wl=k.loss;worst=i}if((k.cls==='brilliant'||k.cls==='great')&&bestI<0)bestI=i});
   if(bestI>=0)t+=` Me encantó ${MK(S.hist[bestI].color,S.hist[bestI].esan)} en la jugada ${Math.floor(bestI/2)+1}.`;
@@ -1866,8 +1961,9 @@ function lessonsHtml(){
   if(!arr.length)return `<div class="lbl">Lecciones de esta partida</div><div class="lesson"><b>Sin errores importantes</b><span>Sigue así: revisa las imprecisiones para pulir los detalles.</span></div>`;
   return `<div class="lbl">Lecciones de esta partida</div>`+arr.map(([th,ids])=>`<div class="lesson" data-act="goto" data-v="${ids[0]+1}" style="cursor:pointer"><b>${THEME_LBL[th]||'Precisión'} <span class="mvn">(${ids.map(i=>Math.floor(i/2)+1+(i%2?'...':'.')+' '+S.hist[i].esan).join(', ')})</span></b><span>${TIP[th]}</span></div>`).join('')}
 function reviewPanel(){
-  const rv=S.rv;if(!rv||!rv.done)return;const bot=BOTS[S.botIdx];
-  const wc=S.user==='w';const W={name:wc?'Tú':bot.name,av:wc?`<div class="av">${USER_AV}</div>`:botAv(bot)},Bk={name:wc?bot.name:'Tú',av:wc?botAv(bot):`<div class="av">${USER_AV}</div>`};
+  const rv=S.rv;if(!rv||!rv.done)return;let bot=BOTS[S.botIdx];
+  const wc=S.user==='w';if(S.imported){bot={name:wc?'Negras':'Blancas',col:wc?'#3d3a36':'#d9d6d0',em:wc?'N':'B',elo:''}}
+  const W={name:wc?'Tú':bot.name,av:wc?`<div class="av">${USER_AV}</div>`:botAv(bot)},Bk={name:wc?bot.name:'Tú',av:wc?botAv(bot):`<div class="av">${USER_AV}</div>`};
   const sw=stats('w'),sb=stats('b');
   if(rv.view==='overview'){
     const bi=bookInfo(S.hist.map(h=>h.uci));
@@ -1884,7 +1980,7 @@ function reviewPanel(){
       ${bi.name?`<div class="opening" style="margin-top:12px">${ICO.book}${bi.name}</div>`:''}
       ${lessonsHtml()}
     </div>
-    <div class="pfoot"><button class="btn" data-act="rvstart">Empezar revisión</button><div class="row"><button class="btn2" data-act="rematch">Revancha</button><button class="btn2" data-act="new">Nueva partida</button></div></div>`;
+    <div class="pfoot"><button class="btn" data-act="rvstart">Empezar revisión</button><div class="row">${S.imported?'<button class="btn2" data-act="import">Importar otra</button>':'<button class="btn2" data-act="rematch">Revancha</button>'}<button class="btn2" data-act="new">Nueva partida</button></div></div>`;
   }else{
     const keys=S.rv.k.map((k,i)=>({k,i})).filter(o=>S.hist[o.i].color===S.user&&(['blunder','mistake','miss','brilliant','great'].includes(o.k.cls)));
     panel.innerHTML=`<div class="ph">${ICO.star.replace('currentColor','#81b64c')}Revisión de partida</div>
@@ -1973,6 +2069,13 @@ document.addEventListener('click',e=>{
     case 'devil':gameDevil();break;
     case 'gnav':gameNav(v);break;
     case 'hgame':openHistoryGame(+v);break;
+    case 'import':importPanel();break;
+    case 'impback':setupPanel();break;
+    case 'impclear':S.impText='';importPanel();break;
+    case 'impside':S.impSide=v;{const tx=$('#impTxt');if(tx)S.impText=tx.value}importPanel();break;
+    case 'impgo':importGo();break;
+    case 'impgame':loadImported(+v);break;
+    case 'imppaste':(async()=>{try{const tx=await navigator.clipboard.readText();if(tx){S.impText=tx;$('#impTxt').value=tx}}catch(e){toast('Mantén pulsado el cuadro de texto y elige «Pegar».')}})();break;
     case 'gply':gameNav(+v);break;
     case 'tab':S.tab=v;S.op=null;B.orient='w';renderBars(START);setupPanel();break;
     case 'op':S.op=v;setupPanel();break;
@@ -2023,7 +2126,7 @@ $('#bVoice').onclick=()=>{Voice.on=!Voice.on;store('voice',Voice.on);if(!Voice.o
 document.addEventListener('change',e=>{if(e.target.id==='vsel'){Voice.name=e.target.value;store('voiceName',Voice.name);Voice.sayText('Hola. Así sonará tu entrenador.',true,{role:'coach'})}if(e.target.id==='vsel2'){Voice.dname=e.target.value;store('voiceDevil',Voice.dname);Voice.sayText('Hola. Así sonará el abogado del diablo.',true,{role:'devil'})}});
 function soundIcon(){$('#bSound').innerHTML=Snd.on?ICO.sound:ICO.mute}
 $('#bSound').onclick=()=>{Snd.on=!Snd.on;store('sound',Snd.on);soundIcon();if(Snd.on)Snd.play('move')};
-function toSetup(){document.body.classList.remove('ingame');S.botIdx=store('bot')??S.botIdx;S.mode=store('mode')||S.mode;S.view=null;S.screen='setup';S.gid++;S.over=null;S.rv=null;B.interactive=null;B.orient='w';
+function toSetup(){document.body.classList.remove('ingame');S.imported=false;S.botIdx=store('bot')??S.botIdx;S.mode=store('mode')||S.mode;S.view=null;S.screen='setup';S.gid++;S.over=null;S.rv=null;B.interactive=null;B.orient='w';
   setBoard({fen:START,last:null,lastColor:null,arrows:[],icon:null,check:null,sel:null,dests:[],hintSq:null});setEvalBar(null,false);layout();S.user='w';renderBars(START);setupPanel()}
 
 /* Botones bajo el tablero en móvil */
