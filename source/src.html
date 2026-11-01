@@ -176,6 +176,7 @@ select.vsel{flex:1;min-width:0;background:#3a3835;color:#fff;border:0;border-rad
 .opc.les{border:2px solid rgba(129,182,76,.35)}.lic{width:44px;height:44px;border-radius:8px;background:#3a3835;display:grid;place-items:center;flex:none!important}.lic i{width:36px;height:36px;background-size:100%;display:block;position:static;transform:none}
 .lsub{font-size:12.5px;color:var(--mut);font-weight:700}.lpre{display:block;color:#4b4844;font-size:13.5px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e6e3df}
 .gnav .btn2{padding:8px 0}.gview{display:none;align-items:center;justify-content:space-between;gap:8px;background:#f0c84b;color:#312e2b;border-radius:7px;padding:7px 10px;font-size:13px;font-weight:700}.gview.on{display:flex}.gview button{background:#312e2b;color:#fff;border-radius:6px;padding:5px 9px;font-weight:800;font-size:12.5px}
+.hist{display:flex;flex-direction:column;gap:6px}.hrow{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border-radius:8px;padding:9px 10px;cursor:pointer}.hrow:hover{background:rgba(255,255,255,.1)}.hrow>div{flex:1;min-width:0}.hrow b{font-size:14px;display:block}.hrow small{display:block;color:var(--mut);font-size:12px;margin-top:2px}.hres{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;font-weight:900;color:#fff;flex:none}.hrow .chev{font-size:22px;color:var(--mut)}
 .cbx{padding:12px 14px 0}.cbx:empty{display:none}.cbx .coach{margin-bottom:0}
 .tip{display:flex;gap:7px;align-items:flex-start;margin-top:8px;background:#eef6e6;border-radius:7px;padding:7px 9px;font-size:12.8px;line-height:1.4;color:#3b4a2f}.tip svg{width:18px;height:18px;flex:none;margin-top:1px}
 .lesson{background:rgba(255,255,255,.05);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13.5px;line-height:1.45}.lesson b{display:block;color:#fff;margin-bottom:2px}.lesson span{color:var(--mut)}.lesson .mvn{color:#f7c045;font-weight:700}
@@ -859,6 +860,7 @@ function setupPanel(){
       <button data-act="color" data-v="r" class="${S.colorPref==='r'?'sel':''}"><div class="rnd">?</div></button>
       <button data-act="color" data-v="b" class="${S.colorPref==='b'?'sel':''}"><i class="pc bk" style="position:static;transform:none"></i></button>
     </div>
+    ${historyHtml()}
   </div>
   <div class="pfoot"><button class="btn" data-act="play">Jugar</button></div>`;
 }
@@ -866,7 +868,7 @@ function setupPanel(){
 /* ====================== Partida ====================== */
 function startGame(pre){
   document.body.classList.add('ingame');if(!Array.isArray(pre))pre=null;
-  Snd.init();Voice.stop();S.gid++;S.view=null;S.game=new Chess();S.hist=[];S.over=null;S.thinking=false;S.hintsUsed=0;S.hint=null;S.liveCls={};S.rv=null;cache.clear();
+  Snd.init();Voice.stop();S.gid++;S.view=null;S.curGameId=null;S.game=new Chess();S.hist=[];S.over=null;S.thinking=false;S.hintsUsed=0;S.hint=null;S.liveCls={};S.rv=null;cache.clear();
   S.user=S.colorPref==='r'?(Math.random()<.5?'w':'b'):S.colorPref;S.screen='game';
   B.orient=S.user;S.flip=false;
   setBoard({fen:START,last:null,lastColor:null,arrows:[],icon:null,check:null,sel:null,dests:[],hintSq:null,interactive:null,onMove:onUserMove});
@@ -1035,7 +1037,7 @@ function undo(){
   setBoard({fen:g.fen(),last:l?{from:l.from,to:l.to}:null,lastColor:null,icon:null,arrows:[],hintSq:null,check:kingSq(g),sel:null,dests:[]});
   renderBars(g.fen());renderMoves();$('#coachBox').innerHTML='';$('#devilBox').innerHTML='';S.devilShown=null;S.hint=null;Snd.play('move');nextTurn()}
 function endGame(res,why){
-  S.over={res,why};S.gid++;B.interactive=null;S.thinking=false;setStatus('Partida terminada');
+  S.over={res,why};S.gid++;B.interactive=null;S.thinking=false;setStatus('Partida terminada');S.curGameId=hAdd();
   const bot=BOTS[S.botIdx];
   if(res==='win'){Snd.play('win');botSay(bot.win,5000)}else{Snd.play('end');if(res==='lose')botSay(bot.lose,5000)}
   const title=res==='win'?'¡Has ganado!':res==='lose'?(why==='por abandono'?'Has abandonado':'Has perdido'):'Tablas';
@@ -1067,6 +1069,37 @@ function gnavUI(){const g=document.getElementById('gview');if(!g)return;
   if(S.view==null){g.classList.remove('on');g.innerHTML='';return}
   const p=S.view;const txt=p===0?'Posición inicial':`Viendo la jugada ${Math.ceil(p/2)}${p%2?'':'...'} ${S.hist[p-1].esan}`;
   g.classList.add('on');g.innerHTML=`<span>${txt}</span><button data-act="gnav" data-v="last">Volver a la partida ⏭</button>`}
+
+/* ====================== Historial de partidas (últimas 5) ====================== */
+const HKEY='games';
+function hLoad(){const h=store(HKEY);return Array.isArray(h)?h:[]}
+function hSave(h){try{store(HKEY,h.slice(0,5))}catch(e){try{store(HKEY,h.slice(0,5).map(g=>({...g,an:null})))}catch(_){}}}
+function hAdd(){if(S.hist.length<2)return null;const id=Date.now();const bi=bookInfo(S.hist.map(m=>m.uci));
+  const e={id,date:id,bot:S.botIdx,user:S.user,mode:S.mode,res:S.over.res,why:S.over.why,moves:S.hist.map(m=>m.uci),hints:S.hintsUsed,opening:bi.name||null,acc:null,an:null};
+  const h=hLoad();h.unshift(e);hSave(h);return id}
+function hUpdate(id,patch){const h=hLoad();const i=h.findIndex(g=>g.id===id);if(i<0)return;h[i]={...h[i],...patch};hSave(h)}
+const packE=e=>e.mate!=null?[1,e.mate,e.sgn]:[0,e.cp];const unpackE=a=>a[0]?{mate:a[1],sgn:a[2]}:{cp:a[1]};
+function packAn(an){return an.map(a=>[packE(a.eval),a.best,(a.pv||[]).slice(0,6),a.second?[packE(a.second.eval),a.second.uci]:null,a.legal,a.over?1:0])}
+function unpackAn(p){return p.map(a=>({eval:unpackE(a[0]),best:a[1],pv:a[2]||[],second:a[3]?{eval:unpackE(a[3][0]),uci:a[3][1],pv:[a[3][1]]}:null,legal:a[4],over:!!a[5]}))}
+function hAgo(t){const d=(Date.now()-t)/60000;if(d<1)return 'hace un momento';if(d<60)return `hace ${Math.round(d)} min`;if(d<1440)return `hace ${Math.round(d/60)} h`;
+  return new Date(t).toLocaleDateString('es-ES',{day:'numeric',month:'short'})}
+function historyHtml(){const h=hLoad();if(!h.length)return '';
+  const R={win:['V','Victoria','#81b64c'],lose:['D','Derrota','#e0453a'],draw:['=','Tablas','#8b8987']};
+  return `<div class="lbl">Tus últimas partidas</div><div class="hist">${h.map(g=>{const b=BOTS[g.bot]||BOTS[0];const r=R[g.res]||R.draw;
+    return `<div class="hrow" data-act="hgame" data-v="${g.id}"><span class="hres" style="background:${r[2]}">${r[0]}</span><div><b>${r[1]} contra ${b.name} <span class="elo">(${b.elo})</span></b>
+      <small>Con ${g.user==='w'?'blancas':'negras'} · ${Math.ceil(g.moves.length/2)} jugadas · ${hAgo(g.date)}${g.acc!=null?` · precisión ${g.acc}%`:''}</small>${g.opening?`<small>${g.opening}</small>`:''}</div><span class="chev">›</span></div>`}).join('')}</div>`}
+function openHistoryGame(id){
+  const g=hLoad().find(x=>x.id===id);if(!g)return;
+  Snd.init();Voice.stop();stopPreview(false);S.gid++;
+  S.botIdx=BOTS[g.bot]?g.bot:0;S.user=g.user;S.mode=g.mode||'review';S.view=null;S.hintsUsed=g.hints||0;S.liveCls={};S.curGameId=g.id;
+  S.game=new Chess();S.hist=[];
+  for(const u of g.moves){const fb=S.game.fen();const m=tryMove(S.game,u);if(!m)break;
+    S.hist.push({uci:u,san:m.san,esan:esSan(m.san),from:m.from,to:m.to,color:m.color,piece:m.piece,captured:m.captured,flags:m.flags,promotion:m.promotion,before:fb,after:S.game.fen()})}
+  S.over={res:g.res,why:g.why};cache.clear();
+  if(g.an){const an=unpackAn(g.an);const fens=[START,...S.hist.map(m=>m.after)];fens.forEach((f,i)=>{if(an[i])cache.set(f,an[i])})}
+  document.body.classList.add('ingame');S.screen='game';B.orient=S.user;B.onMove=onUserMove;
+  setBoard({fen:S.game.fen(),last:null,lastColor:null,arrows:[],icon:null,check:kingSq(S.game),sel:null,dests:[],hintSq:null,interactive:null});
+  renderBars(S.game.fen());startReview()}
 
 /* ====================== Clasificación ====================== */
 function isSacrifice(rec){
@@ -1794,6 +1827,7 @@ async function startReview(){S.view=null;
   }
   const bk=bookInfo(hist.map(h=>h.uci)).n;
   for(let i=0;i<hist.length;i++){const prev=i>0?S.rv.k[i-1].loss:null;const k=classifyOne(i,S.rv.an[i],S.rv.an[i+1],prev,bk);S.rv.k[i]=k;S.rv.cls[i]=k.cls}
+  if(S.curGameId){try{hUpdate(S.curGameId,{acc:stats(S.user).acc,an:packAn(S.rv.an)})}catch(e){}}
   S.rv.done=true;S.rv.view='overview';S.rv.ply=hist.length;Snd.play('notify');
   setEvalBar(S.rv.an[S.rv.ply].eval,true);layout();reviewPanel();showPly(S.rv.ply,true)}
 function stats(c){
@@ -1938,6 +1972,7 @@ document.addEventListener('click',e=>{
     case 'vtest':Voice.sayText(v==='devil'?'Hola. Soy el abogado del diablo. Te diré lo que haría tu rival.':'Hola. Soy tu entrenador. Te explicaré cada jugada para que mejores.',true,{role:v});break;
     case 'devil':gameDevil();break;
     case 'gnav':gameNav(v);break;
+    case 'hgame':openHistoryGame(+v);break;
     case 'gply':gameNav(+v);break;
     case 'tab':S.tab=v;S.op=null;B.orient='w';renderBars(START);setupPanel();break;
     case 'op':S.op=v;setupPanel();break;
@@ -1988,7 +2023,7 @@ $('#bVoice').onclick=()=>{Voice.on=!Voice.on;store('voice',Voice.on);if(!Voice.o
 document.addEventListener('change',e=>{if(e.target.id==='vsel'){Voice.name=e.target.value;store('voiceName',Voice.name);Voice.sayText('Hola. Así sonará tu entrenador.',true,{role:'coach'})}if(e.target.id==='vsel2'){Voice.dname=e.target.value;store('voiceDevil',Voice.dname);Voice.sayText('Hola. Así sonará el abogado del diablo.',true,{role:'devil'})}});
 function soundIcon(){$('#bSound').innerHTML=Snd.on?ICO.sound:ICO.mute}
 $('#bSound').onclick=()=>{Snd.on=!Snd.on;store('sound',Snd.on);soundIcon();if(Snd.on)Snd.play('move')};
-function toSetup(){document.body.classList.remove('ingame');S.screen='setup';S.gid++;S.over=null;S.rv=null;B.interactive=null;B.orient='w';
+function toSetup(){document.body.classList.remove('ingame');S.botIdx=store('bot')??S.botIdx;S.mode=store('mode')||S.mode;S.view=null;S.screen='setup';S.gid++;S.over=null;S.rv=null;B.interactive=null;B.orient='w';
   setBoard({fen:START,last:null,lastColor:null,arrows:[],icon:null,check:null,sel:null,dests:[],hintSq:null});setEvalBar(null,false);layout();S.user='w';renderBars(START);setupPanel()}
 
 /* Botones bajo el tablero en móvil */
