@@ -1,5 +1,5 @@
 /* Jaque — service worker: guarda la app en el dispositivo para que funcione sin conexión. */
-const VERSION = 'jaque-v5';
+const VERSION = 'jaque-v6';
 const FILES = [
   './',
   './index.html',
